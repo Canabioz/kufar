@@ -30,18 +30,19 @@ class KufarParsingController extends Controller
         }
         $categories = $doc->find('#left_categories li ');
         foreach ($categories as $category) {
-            if (trim($category->children[0]->text()) == "Рекорды Куфара") continue;
-            if (!isset($category->attr['data-submenu-id'])) {
-                $countPagination = 1;
-                $categoryName = $category->text();
-                $docSubCategory = HtmlDomParser::str_get_html($this->getSite($category->children[0]->href));
-                if ($check = !$this->checkURL($docSubCategory, $category->children[0]->href)) {
-                    $this->saveLogInDB("Error1");
-                    exit;
-                }
-                $subCategories = $docSubCategory->find(".list_ads__title");
-                $this->getAllProductsSubCategory($subCategories, $docSubCategory, $countPagination, $category);
+            if (isset($category->attr['data-submenu-id']) || (trim($category->children[0]->text()) == "Рекорды Куфара")) {
+                continue;
             }
+            $countPagination = 1;
+            $categoryName = $category->text();
+            sleep(0.5);
+            $docSubCategory = HtmlDomParser::str_get_html($this->getSite($category->children[0]->href));
+            if ($check = !$this->checkURL($docSubCategory, $category->children[0]->href)) {
+                $this->saveLogInDB("Error1");
+                exit;
+            }
+            $subCategories = $docSubCategory->find(".list_ads__title");
+            $this->getAllProductsSubCategory($subCategories, $docSubCategory, $countPagination, $category);
         }
     }
 
@@ -56,6 +57,7 @@ class KufarParsingController extends Controller
     {
         foreach ($subCategories as $subCategory) {
             try {
+                sleep(0.2);
                 $docSubCategory = HtmlDomParser::str_get_html($this->getSite($subCategory->href));
                 if ($check = !$this->checkURL($docSubCategory, $subCategory->href)) {
                     $this->saveLogInDB("Error2");
@@ -68,6 +70,9 @@ class KufarParsingController extends Controller
                     if (empty($phoneJSON)) {
                         break;
                     }
+                    if ($licences = $docSubCategory->find('.adview_content__licence')) {
+                        $ynp = $licences[0]->children[0]->text();
+                    }
                     $phone = $phoneJSON->phone;
                     $seller = $docSubCategory->find('.adview_contact__name')[0]->nodes[0]->text();
                     $this->savePhoneInDB($data = [
@@ -75,13 +80,16 @@ class KufarParsingController extends Controller
                         'url' => $subCategory->href,
                         'phone' => $phone,
                         'seller' => $seller,
+                        'ynp' => $ynp,
                     ]);
+                    $ynp = null;
                 }
             } catch (\Exception $exception) {
                 $this->saveLogInDB("Error3");
             }
         }
         if (!$docSubCategory->find(".alert_type_search")) {
+            sleep(0.5);
             $docSubCategory = HtmlDomParser::str_get_html($this->getSite($category->children[0]->href . "?cu=BYR&o=" . ++$countPagination));
             if (!$this->checkURL($docSubCategory, $category->children[0]->href . "?cu=BYR&o=" . $countPagination)) {
                 $this->saveLogInDB("Error4");
@@ -122,6 +130,9 @@ class KufarParsingController extends Controller
         if (isset($data['log'])) {
             $phone->setLog($data['log']);
         }
+        if (isset($data['ynp'])) {
+            $phone->setUnp($data['ynp']);
+        }
 
         $em->persist($phone);
         $em->flush();
@@ -137,6 +148,7 @@ class KufarParsingController extends Controller
     {
         if (is_bool($doc)) {
             for ($i = 0; $i < 3; ++$i) {
+                sleep(0.5);
                 $doc = HtmlDomParser::str_get_html($this->getSite($url));
                 if (!is_bool($doc)) {
                     echo "gg";

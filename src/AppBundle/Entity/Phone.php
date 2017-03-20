@@ -52,9 +52,16 @@ class Phone
     /**
      * @var string
      *
+     * @ORM\Column(name="unp", type="string", length=255, nullable=true)
+     */
+    private $unp;
+    /**
+     * @var string
+     *
      * @ORM\Column(name="log", type="string", length=255, nullable=true)
      */
     private $log;
+
 
 
     /**
@@ -186,5 +193,28 @@ class Phone
     {
         return $this->log;
     }
-}
 
+    /**
+     * Set unp
+     *
+     * @param string $unp
+     *
+     * @return Phone
+     */
+    public function setUnp($unp)
+    {
+        $this->unp = $unp;
+
+        return $this;
+    }
+
+    /**
+     * Get unp
+     *
+     * @return string
+     */
+    public function getUnp()
+    {
+        return $this->unp;
+    }
+}
