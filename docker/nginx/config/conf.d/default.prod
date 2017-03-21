@@ -1,0 +1,44 @@
+server {
+    server_name docker.local;
+    root /var/www/web;
+    index index.php;
+    client_max_body_size 50M;
+
+    error_log /var/log/nginx/test_docker.error.log;
+
+    rewrite ^/app\.php/?(.*)$ /$1 permanent;
+
+    location / {
+        index app.php;
+        try_files $uri @rewriteapp;
+    }
+
+    location ~ ^/media/cache {
+        try_files $uri @rewriteapp;
+    }
+
+    location @rewriteapp {
+        rewrite ^(.*)$ /app.php/$1 last;
+    }
+
+    location ~ ^/app\.php(/|$) {
+        include fastcgi_params;
+
+        if (-f $document_root/maintenance/index.html) {
+            return 503;
+        }
+
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_pass php7:9000;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+
+    location ~ /\.ht {
+       deny all;
+    }
+
+    error_page 503 @maintenance;
+    location @maintenance {
+        rewrite ^(.*)$ /maintenance/index.html break;
+    }
+}

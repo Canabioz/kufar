@@ -24,7 +24,7 @@ class KufarParsingController extends Controller
     public function indexAction(Request $request)
     {
         $doc = HtmlDomParser::str_get_html($this->getSite(KufarParsingController::URL));
-        if (!$this->checkURL($doc, KufarParsingController::URL)) {
+        if ($this->checkURL($doc, KufarParsingController::URL) == false) {
             $this->saveLogInDB("Error");
             exit;
         }
@@ -37,7 +37,7 @@ class KufarParsingController extends Controller
             $categoryName = $category->text();
             sleep(0.5);
             $docSubCategory = HtmlDomParser::str_get_html($this->getSite($category->children[0]->href));
-            if ($check = !$this->checkURL($docSubCategory, $category->children[0]->href)) {
+            if ($this->checkURL($docSubCategory, $category->children[0]->href) == false) {
                 $this->saveLogInDB("Error1");
                 exit;
             }
@@ -59,9 +59,9 @@ class KufarParsingController extends Controller
             try {
                 sleep(0.2);
                 $docSubCategory = HtmlDomParser::str_get_html($this->getSite($subCategory->href));
-                if ($check = !$this->checkURL($docSubCategory, $subCategory->href)) {
+                if ($this->checkURL($docSubCategory, $subCategory->href) == false) {
                     $this->saveLogInDB("Error2");
-                    exit;
+                    break;
                 }
                 if ($phoneClass = $docSubCategory->find(".js_adview_phone_link")) {
                     $name = $subCategory->text();
@@ -91,7 +91,7 @@ class KufarParsingController extends Controller
         if (!$docSubCategory->find(".alert_type_search")) {
             sleep(0.5);
             $docSubCategory = HtmlDomParser::str_get_html($this->getSite($category->children[0]->href . "?cu=BYR&o=" . ++$countPagination));
-            if (!$this->checkURL($docSubCategory, $category->children[0]->href . "?cu=BYR&o=" . $countPagination)) {
+            if ($this->checkURL($docSubCategory, $category->children[0]->href . "?cu=BYR&o=" . $countPagination) == false) {
                 $this->saveLogInDB("Error4");
                 exit;
             }

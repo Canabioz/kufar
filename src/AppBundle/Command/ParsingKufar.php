@@ -32,9 +32,11 @@ class ParsingKufar extends ContainerAwareCommand
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $output->writeln('Parsing start...');
+		ini_set('memory_limit','2G');
+        $output->writeln('Parsing start... ' .ParsingKufar::URL);
         $doc = HtmlDomParser::str_get_html($this->getSite(ParsingKufar::URL));
-        if (!$this->checkURL($doc, ParsingKufar::URL)) {
+        if ($this->checkURL($doc, ParsingKufar::URL) == false) {
+			$output->writeln('Connect cite return');
             $this->saveLogInDB("Error");
             exit;
         }
@@ -48,12 +50,14 @@ class ParsingKufar extends ContainerAwareCommand
             $output->writeln($categoryName);
             sleep(0.5);
             $docSubCategory = HtmlDomParser::str_get_html($this->getSite($category->children[0]->href));
-            if ($check = !$this->checkURL($docSubCategory, $category->children[0]->href)) {
-                $this->saveLogInDB("Error1");
+            if ($this->checkURL($docSubCategory, $category->children[0]->href) == false) {
+                $output->writeln('Error Category'.$categoryName);
+				$this->saveLogInDB("Error1");
                 exit;
             }
             $subCategories = $docSubCategory->find(".list_ads__title");
-            $this->getAllProductsSubCategory($subCategories, $docSubCategory, $countPagination, $category, $output);
+			$categoryURL = $category->children[0]->href;
+            $this->getAllProductsSubCategory($subCategories, $docSubCategory, $countPagination, $categoryURL, $output);
         }
 
         $output->writeln('All');
@@ -64,18 +68,19 @@ class ParsingKufar extends ContainerAwareCommand
      * @param $subCategories
      * @param $docSubCategory
      * @param $countPagination
-     * @param $category
+     * @param $categoryURL
      * @param OutputInterface $output
      */
-    public function getAllProductsSubCategory($subCategories, $docSubCategory, $countPagination, $category, OutputInterface $output)
+    public function getAllProductsSubCategory($subCategories, $docSubCategory, $countPagination, $categoryURL,$output)
     {
         foreach ($subCategories as $subCategory) {
             try {
                 sleep(0.2);
                 $docSubCategory = HtmlDomParser::str_get_html($this->getSite($subCategory->href));
-                if ($check = !$this->checkURL($docSubCategory, $subCategory->href)) {
-                    $this->saveLogInDB("Error2");
-                    exit;
+                if ($this->checkURL($docSubCategory, $subCategory->href) == false) {
+                    $output->writeln(' Error SubCategory');
+					$this->saveLogInDB("Error2");
+                    break;
                 }
                 if ($phoneClass = $docSubCategory->find(".js_adview_phone_link")) {
                     $name = $subCategory->text();
@@ -87,7 +92,7 @@ class ParsingKufar extends ContainerAwareCommand
                     }
                     if ($licences = $docSubCategory->find('.adview_content__licence')) {
                         $ynp = $licences[0]->children[0]->text();
-                    }
+                    } else $ynp = null;
                     $phone = $phoneJSON->phone;
                     $output->write(' | ' . $phone);
                     $seller = $docSubCategory->find('.adview_contact__name')[0]->nodes[0]->text();
@@ -99,22 +104,25 @@ class ParsingKufar extends ContainerAwareCommand
                         'seller' => $seller,
                         'ynp' => $ynp,
                     ]);
-                    $ynp = null;
+                   
                 }
             } catch (\Exception $exception) {
+				$output->writeln('Error3' . $exception);
                 $this->saveLogInDB("Error3");
             }
         }
         if (!$docSubCategory->find(".alert_type_search")) {
             sleep(0.5);
-            $docSubCategory = HtmlDomParser::str_get_html($this->getSite($category->children[0]->href . "?cu=BYR&o=" . ++$countPagination));
-            if (!$this->checkURL($docSubCategory, $category->children[0]->href . "?cu=BYR&o=" . $countPagination)) {
-                $this->saveLogInDB("Error4");
+            $docSubCategory = HtmlDomParser::str_get_html($this->getSite($categoryURL . "?cu=BYR&o=" . ++$countPagination));
+            if ($this->checkURL($docSubCategory, $categoryURL . "?cu=BYR&o=" . $countPagination) == false) {
+                $output->writeln("ElementConnectNo");
+				$this->saveLogInDB("Error4");
                 exit;
             }
             $subCategories = $docSubCategory->find(".list_ads__title");
             $output->writeln('Pagination ' . $countPagination);
-            $this->getAllProductsSubCategory($subCategories, $docSubCategory, $countPagination, $category, $output);
+			$this->em->clear();
+            $this->getAllProductsSubCategory($subCategories, $docSubCategory, $countPagination, $categoryURL, $output);
         }
 
     }
@@ -167,7 +175,6 @@ class ParsingKufar extends ContainerAwareCommand
                 sleep(0.5);
                 $doc = HtmlDomParser::str_get_html($this->getSite($url));
                 if (!is_bool($doc)) {
-                    echo "gg";
                     break;
                 }
                 if ($i >= 3) {
@@ -175,20 +182,20 @@ class ParsingKufar extends ContainerAwareCommand
                     return false;
                 }
             }
+            return $doc;
         }
 
         return true;
     }
 
     /**
-     * @param string $url
+     * @param mixed $url
      * @return mixed
      */
-    public function getSite(string $url)
+    public function getSite($url)
     {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         $result = curl_exec($ch);
@@ -198,10 +205,10 @@ class ParsingKufar extends ContainerAwareCommand
 
 
     /**
-     * @param string $data
+     * @param mixed $data
      * @return mixed
      */
-    public function getPhoneItem(string $data)
+    public function getPhoneItem($data)
     {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, 'https://www.kufar.by/get_full_phone.json');

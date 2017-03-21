@@ -1,0 +1,47 @@
+version: '2'
+services:
+  nginx:
+    build: ./docker/nginx
+    depends_on:
+      - php7
+      - db
+    volumes:
+      - .:/var/www
+    ports:
+      - "80:80"
+  php7:
+    build: ./docker/php7
+    ports:
+      - "9000"
+    volumes:
+      - .:/var/www
+    working_dir: /var/www
+    environment:
+      SYMFONY__DATABASE__NAME: kufar
+      SYMFONY__DATABASE__USER: root
+      SYMFONY__DATABASE__PASSWORD: root
+  db:
+    build: ./docker/mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: kufar
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - ./docker/mysql/mysql-data:/var/lib/mysql
+      - ./docker/mysql/dumps:/docker-entrypoint-initdb.d
+
+  php7_test:
+    build: ./docker/php7_test
+    ports:
+      - "9000"
+    volumes:
+      - .:/var/www
+    working_dir: /var/www
+    environment:
+      SYMFONY__DATABASE__NAME: kufar
+      SYMFONY__DATABASE__USER: root
+      SYMFONY__DATABASE__PASSWORD: root
+      SYMFONY_ENV: test
