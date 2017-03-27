@@ -28,6 +28,12 @@ class AppKernel extends Kernel
         return $bundles;
     }
 
+	
+	public function __construct($environment, $debug){
+        date_default_timezone_set( 'Europe/Minsk' );
+        parent::__construct($environment, $debug);
+    }
+	
     public function getRootDir()
     {
         return __DIR__;

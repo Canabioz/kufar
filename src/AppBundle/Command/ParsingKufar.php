@@ -32,35 +32,56 @@ class ParsingKufar extends ContainerAwareCommand
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-		ini_set('memory_limit','2G');
-        $output->writeln('Parsing start... ' .ParsingKufar::URL);
-        $doc = HtmlDomParser::str_get_html($this->getSite(ParsingKufar::URL));
-        if ($this->checkURL($doc, ParsingKufar::URL) == false) {
-			$output->writeln('Connect cite return');
-            $this->saveLogInDB("Error");
-            exit;
-        }
-        $categories = $doc->find('#left_categories li ');
-        foreach ($categories as $category) {
-            if (isset($category->attr['data-submenu-id']) || (trim($category->children[0]->text()) == "Рекорды Куфара")) {
-                continue;
-            }
-            $countPagination = 1;
-            $categoryName = $category->text();
-            $output->writeln($categoryName);
-            sleep(0.5);
-            $docSubCategory = HtmlDomParser::str_get_html($this->getSite($category->children[0]->href));
-            if ($this->checkURL($docSubCategory, $category->children[0]->href) == false) {
-                $output->writeln('Error Category'.$categoryName);
-				$this->saveLogInDB("Error1");
+        $output->writeln("Parsing start...");
+        $countCategory = 1;
+        try{
+            ini_set('memory_limit', '4G');
+
+            $doc = HtmlDomParser::str_get_html($this->getSite(ParsingKufar::URL));
+            if ($this->checkURL($doc, ParsingKufar::URL) == false) {
+                $output->writeln('Connect cite return');
+                $this->saveLogInDB("Error");
                 exit;
             }
-            $subCategories = $docSubCategory->find(".list_ads__title");
-			$categoryURL = $category->children[0]->href;
-            $this->getAllProductsSubCategory($subCategories, $docSubCategory, $countPagination, $categoryURL, $output);
-        }
 
-        $output->writeln('All');
+            $categories = $doc->find('#left_categories li');
+            foreach ($categories as $category) {
+                if (isset($category->attr['data-submenu-id']) || (trim($category->children[0]->text()) == "Рекорды Куфара")) {
+                    continue;
+                }
+                $file = file_exists("pagination.txt");
+                if ($file){
+                    $fp = file('pagination.txt');
+                    $countPagination = trim($fp['0']);
+                    $output->writeln('Test0!!!!!!!!!'.$countPagination);
+                    $categoryText = trim($fp['1']);
+                    $output->writeln('Test1!!!!!!!!!'.$categoryText);
+                    $countCategory = trim($fp['2']);
+                    $output->writeln('Test2!!!!!!!!!'.$countCategory);
+                    if ($categoryText != trim($category->children[0]->text()) ){
+                        continue;
+                    }
+                } else $countPagination = 1;
+                $categoryName = trim($category->text());
+                sleep(0.5);
+                $docSubCategory = HtmlDomParser::str_get_html($this->getSite($category->children[0]->href));
+
+                $subCategories = $docSubCategory->find(".list_ads__title");
+                $categoryURL = $category->children[0]->href;
+                $this->getAllProductsSubCategory($subCategories, $docSubCategory, $countPagination, $categoryURL, $output,$categories,$countCategory);
+            }
+
+            $output->writeln('All');
+        } catch (\Exception $exception) {
+            $output->writeln("Connection");
+            $connection = $this->em->getConnection();
+            if ($connection->ping() === false) {
+                $connection->close();
+                $connection->connect();
+                var_dump($exception);
+                $output->writeln("Connection close and open");
+            }
+        }
     }
 
 
@@ -71,31 +92,32 @@ class ParsingKufar extends ContainerAwareCommand
      * @param $categoryURL
      * @param OutputInterface $output
      */
-    public function getAllProductsSubCategory($subCategories, $docSubCategory, $countPagination, $categoryURL,$output)
+    public function getAllProductsSubCategory($subCategories, $docSubCategory, $countPagination, $categoryURL, $output,$categories, $countCategory)
     {
         foreach ($subCategories as $subCategory) {
             try {
-                sleep(0.2);
-                $docSubCategory = HtmlDomParser::str_get_html($this->getSite($subCategory->href));
-                if ($this->checkURL($docSubCategory, $subCategory->href) == false) {
-                    $output->writeln(' Error SubCategory');
-					$this->saveLogInDB("Error2");
+                //sleep(0.2);
+                $docSubCategoryElement = HtmlDomParser::str_get_html($this->getSite($subCategory->href));
+                if ($this->checkURL($docSubCategoryElement, $subCategory->href) == false) {
+                    $output->writeln('Error SubCategory');
+                    $this->saveLogInDB("Error2");
                     break;
                 }
-                if ($phoneClass = $docSubCategory->find(".js_adview_phone_link")) {
+                if ($phoneClass = $docSubCategoryElement->find(".js_adview_phone_link")) {
                     $name = $subCategory->text();
                     $output->write('__' . $name);
                     $phoneId = preg_replace("#[^0-9]+#", "", $phoneClass[0]->href);
+                    //sleep(0.25);
                     $phoneJSON = json_decode($this->getPhoneItem($phoneId));
                     if (empty($phoneJSON)) {
                         break;
                     }
-                    if ($licences = $docSubCategory->find('.adview_content__licence')) {
+                    if ($licences = $docSubCategoryElement->find('.adview_content__licence')) {
                         $ynp = $licences[0]->children[0]->text();
                     } else $ynp = null;
                     $phone = $phoneJSON->phone;
                     $output->write(' | ' . $phone);
-                    $seller = $docSubCategory->find('.adview_contact__name')[0]->nodes[0]->text();
+                    $seller = $docSubCategoryElement->find('.adview_contact__name')[0]->nodes[0]->text();
                     $output->writeln(' | ' . $seller);
                     $this->savePhoneInDB($data = [
                         'name' => $name,
@@ -104,27 +126,43 @@ class ParsingKufar extends ContainerAwareCommand
                         'seller' => $seller,
                         'ynp' => $ynp,
                     ]);
-                   
+                    $this->em->clear();
                 }
+                $this->em->clear();
             } catch (\Exception $exception) {
-				$output->writeln('Error3' . $exception);
-                $this->saveLogInDB("Error3");
+                $output->writeln('Error for $subCategory');
             }
         }
-        if (!$docSubCategory->find(".alert_type_search")) {
-            sleep(0.5);
+
+        $fp = fopen("pagination.txt", "w+");
+        fwrite($fp, $countPagination . PHP_EOL);
+        fwrite($fp, trim($categories[$countCategory]->text()) . PHP_EOL);
+        fwrite($fp, $countCategory . PHP_EOL);
+        fclose($fp);
+
+        if (!$docSubCategory->find(".alert_type_search ")) {
+            //sleep(0.5);
             $docSubCategory = HtmlDomParser::str_get_html($this->getSite($categoryURL . "?cu=BYR&o=" . ++$countPagination));
+            $output->writeln($categoryURL . "?cu=BYR&o=" . $countPagination);
             if ($this->checkURL($docSubCategory, $categoryURL . "?cu=BYR&o=" . $countPagination) == false) {
                 $output->writeln("ElementConnectNo");
-				$this->saveLogInDB("Error4");
+                $this->saveLogInDB("Error4");
                 exit;
             }
             $subCategories = $docSubCategory->find(".list_ads__title");
             $output->writeln('Pagination ' . $countPagination);
-			$this->em->clear();
-            $this->getAllProductsSubCategory($subCategories, $docSubCategory, $countPagination, $categoryURL, $output);
+            $this->em->clear();
+            $this->getAllProductsSubCategory($subCategories, $docSubCategory, $countPagination, $categoryURL, $output,$categories, $countCategory);
         }
-
+        $output->writeln("The end". $countPagination);
+        ++$countCategory;
+        if (isset($categories[$countCategory]->attr['data-submenu-id']) ) {
+            ++$countCategory;
+        }
+        $fp = fopen("pagination.txt", "w+");
+        fwrite($fp, 1 . PHP_EOL);
+        fwrite($fp, trim($categories[$countCategory]->text()) . PHP_EOL);
+        fwrite($fp, $countCategory . PHP_EOL);
     }
 
     /**
@@ -143,9 +181,15 @@ class ParsingKufar extends ContainerAwareCommand
 
     /**
      * @param $data
+     * @return int
      */
     public function savePhoneInDB($data)
     {
+        $repository = $this->em->getRepository('AppBundle:Phone')->findBy(['url' => $data['url']]);
+        if ($repository) {
+            $this->em->clear();
+            return 0;
+        }
         $phone = new Phone();
         $phone->setName($data['name']);
         $phone->setPhone($data['phone']);
